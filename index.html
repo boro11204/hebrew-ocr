@@ -9,7 +9,7 @@
 <meta property="og:description" content="Photo or PDF in, Hebrew text out. Copy, TXT or Word. Free with your own Google AI key.">
 <meta name="theme-color" content="#1f3a5f">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f3a5f'/%3E%3Ctext x='32' y='46' font-size='38' text-anchor='middle' fill='%23f4d58d' font-family='serif'%3E%D7%90%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header class="top">
@@ -149,10 +149,10 @@
 </main>
 
 <footer class="wrap foot">
-  <p>Runs entirely in your browser. Nothing is stored on any server. Offline engine: <a href="https://github.com/naptha/tesseract.js" target="_blank" rel="noopener">Tesseract.js</a> (Apache 2.0) with Google's <a href="https://github.com/tesseract-ocr/tessdata_best" target="_blank" rel="noopener">tessdata_best</a> Hebrew model and the <a href="https://gitlab.com/pninim.org/tessdata_heb_rashi" target="_blank" rel="noopener">heb_rashi</a> Rashi-script model and word list by Zeev Pekar / pninim.org (Apache 2.0, word list built from Sefaria's open texts). PDF reading by <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> (Apache 2.0), PDF writing by pdf-lib (MIT); iPhone HEIC photos by heic2any (MIT). AI reading by Google Gemini through your own key. Thanks to the ivelt.com member “שטאלץ צו זיין א איד”, whose free OCR page (March 2026) gave the idea of listing every automatic fix.</p>
+  <p>Runs entirely in your browser. Nothing is stored on any server. Offline engine: <a href="https://github.com/naptha/tesseract.js" target="_blank" rel="noopener">Tesseract.js</a> (Apache 2.0) with fine-tuned versions (Nov 2026, trained on real printed lines from public-domain Vilna and Prague scans; code and test numbers at <a href="https://github.com/boro11204/hebrew-ocr-offline" target="_blank" rel="noopener">hebrew-ocr-offline</a>) of Google's <a href="https://github.com/tesseract-ocr/tessdata_best" target="_blank" rel="noopener">tessdata_best</a> Hebrew model and the <a href="https://gitlab.com/pninim.org/tessdata_heb_rashi" target="_blank" rel="noopener">heb_rashi</a> Rashi-script model by Zeev Pekar / pninim.org (both Apache 2.0), and pninim.org's word list (built from Sefaria's open texts). PDF reading by <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">pdf.js</a> (Apache 2.0), PDF writing by pdf-lib (MIT); iPhone HEIC photos by heic2any (MIT). AI reading by Google Gemini through your own key. Thanks to the ivelt.com member “שטאלץ צו זיין א איד”, whose free OCR page (March 2026) gave the idea of listing every automatic fix.</p>
 </footer>
 
 <dialog id="zoom"><img id="zoomImg" alt="Page"><button id="zoomClose" class="primary small">Close</button></dialog>
-<script type="module" src="app.js?v=4"></script>
+<script type="module" src="app.js?v=5"></script>
 </body>
 </html>

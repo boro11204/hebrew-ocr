@@ -6,7 +6,11 @@
 
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
-export const ENGINE_MODELS = { heb: 'Hebrew (square script) — Google tessdata_best', heb_rashi: 'Rashi script — pninim.org heb_rashi' };
+// v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
+const L_SQ = 'heb4', L_RASHI = 'heb_rashi4';
+// v4 models read the cleaned gray image better than the black & white one (measured on Vilna RH 2a)
+const USE_GRAY = !(typeof window !== 'undefined' && window.__HOCR_GRAY === false);
+export const ENGINE_MODELS = { [L_SQ]: 'Hebrew (square script) — tessdata_best heb, fine-tuned (hebocr v4)', [L_RASHI]: 'Rashi script — pninim.org heb_rashi, fine-tuned (hebocr v4)' };
 
 // ---------------------------------------------------------------- loading
 let tessLoading;
@@ -80,7 +84,8 @@ function lanczosResize(g, w, h, W, H) {
 export function preprocess(srcCanvas, opts = {}) {
   const steps = []; let c = srcCanvas; let w = c.width, h = c.height;
   let g = grayOf(c); const pitch0 = linePitch(g, w, h);
-  const target = 120; // ~120 px per text line read best in our tests (square and Rashi alike)
+  // v4 models were trained on lines at their scanned size (~30-45 px line pitch at 300 dpi); the old models liked ~120 px
+  const target = (typeof window !== 'undefined' && window.__HOCR_TARGET) || (opts.script === 'rashi' ? 70 : 45);
   let scale = pitch0 ? Math.min(4, Math.max(1, target / pitch0)) : 1;
   const maxPx = 36e6, maxSide = 9000; scale = Math.min(scale, Math.sqrt(maxPx / (w * h)), maxSide / Math.max(w, h)); if (scale < 1) scale = Math.max(scale, 0.25);
   if (Math.abs(scale - 1) > 0.05) { const W2 = Math.round(w * scale), H2 = Math.round(h * scale); g = scale > 1 ? lanczosResize(g, w, h, W2, H2) : grayOf(canvasFrom(c, W2, H2)); w = W2; h = H2; steps.push(`${scale > 1 ? 'enlarged' : 'reduced'} ×${scale.toFixed(1)}`); }
@@ -123,7 +128,7 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   const say = t => onStatus && onStatus(t);
   say('Engine: cleaning up the page image…');
   const pp = preprocess(srcCanvas, { script, binarize, straighten });
-  const langs = script === 'square' ? ['heb'] : script === 'rashi' ? ['heb_rashi', 'heb'] : ['heb', 'heb_rashi'];
+  const langs = script === 'square' ? [L_SQ] : script === 'rashi' ? [L_RASHI, L_SQ] : [L_SQ, L_RASHI];
   await loadWords().catch(() => null);
   const res = {}; // lang -> [column lines]
   for (const lang of langs) {
@@ -131,8 +136,8 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
     await wk.setParameters({ tessedit_pageseg_mode: '4' });
     res[lang] = [];
     for (let i = 0; i < pp.cols.length; i++) {
-      say(`Engine: reading ${pp.cols.length > 1 ? `column ${i + 1} of ${pp.cols.length} ` : ''}with the ${lang === 'heb' ? 'Hebrew' : 'Rashi'} model…`);
-      const [x0, x1] = pp.cols[i]; const cc = pp.cols.length > 1 ? cropCanvas(pp.bin, x0, x1) : pp.bin;
+      say(`Engine: reading ${pp.cols.length > 1 ? `column ${i + 1} of ${pp.cols.length} ` : ''}with the ${lang === L_SQ ? 'Hebrew' : 'Rashi'} model…`);
+      const [x0, x1] = pp.cols[i]; const src = USE_GRAY ? pp.gray : pp.bin; const cc = pp.cols.length > 1 ? cropCanvas(src, x0, x1) : src;
       const { data } = await wk.recognize(cc, {}, { blocks: true, text: false });
       res[lang].push(linesOf(data));
     }
@@ -150,7 +155,7 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   let text = colTexts.length > 1 ? colTexts.map((t, i) => `[[טור ${i + 1}]]\n${t}`).join('\n\n') : colTexts[0];
   text = hebPunct(text);
   const pc = postCorrect(text);
-  const steps = [...pp.steps, `${lead === 'heb' ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === 'heb' ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the word list`];
+  const steps = [...pp.steps, `${lead === L_SQ ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === L_SQ ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the word list`];
   return { text: pc.text, raw: text, changes: pc.changes, steps, lead, scores, pp };
 }
 
@@ -159,7 +164,7 @@ export async function pdfPageBytes(srcCanvas, script = 'mixed', onStatus) {
   const pp = preprocess(srcCanvas, { script, columns: false });
   // keep the PDF light: page image at most 2000 px on the long side
   const s = Math.min(1, 2000 / Math.max(pp.w, pp.h)); const img = s < 1 ? canvasFrom(pp.gray, Math.round(pp.w * s), Math.round(pp.h * s)) : pp.gray;
-  const lang = script === 'square' ? 'heb' : script === 'rashi' ? 'heb_rashi' : 'heb';
+  const lang = script === 'square' ? L_SQ : script === 'rashi' ? L_RASHI : L_SQ;
   const wk = await getWorker(lang, onStatus); await wk.setParameters({ tessedit_pageseg_mode: '3' });
   // a JPEG input is embedded as-is by Tesseract's PDF writer: pages stay small
   const jpg = await new Promise(r => img.toBlob(r, 'image/jpeg', 0.82));
