@@ -1,6 +1,6 @@
 # Hebrew OCR (v3, Nov 8 2026)
 
-Free Hebrew OCR in the browser for seforim, Rashi script, old prints and Yiddish. Live at https://hebrew-ocr.sites.tab.bot
+Free Hebrew OCR in the browser for seforim, Rashi script, old prints and Yiddish. Live at https://hebrew-ocr.sites.tab.bot and on GitHub Pages at https://boro11204.github.io/hebrew-ocr/
 
 ## Three ways to read
 - **Offline engine (no AI, no key, no limit)**: real OCR code running in the browser.
@@ -22,4 +22,4 @@ The idea of listing each automatic fix comes from the free OCR page that ivelt.c
 
 No server. No key is stored anywhere but the user's own browser.
 
-Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
+All files the site needs, including the large third-party ones (Tesseract cores, models, word list, pdf.js worker, heic2any), are in this repo, so GitHub Pages serves the full site from the `main` branch root. `tools/get-big-files.sh` re-fetches the large files from their original sources if ever needed. (The `site/` folder is the older Nov 6 version, kept for history.)
