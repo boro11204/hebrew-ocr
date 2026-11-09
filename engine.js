@@ -7,10 +7,10 @@
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
 // v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
-const L_SQ = 'heb4', L_RASHI = 'heb_rashi4';
+const L_SQ = (typeof window !== 'undefined' && window.__HOCR_SQ) || 'heb4', L_RASHI = (typeof window !== 'undefined' && window.__HOCR_RASHI) || 'heb_rashi5';
 // v4 models read the cleaned gray image better than the black & white one (measured on Vilna RH 2a)
 const USE_GRAY = !(typeof window !== 'undefined' && window.__HOCR_GRAY === false);
-export const ENGINE_MODELS = { [L_SQ]: 'Hebrew (square script) — tessdata_best heb, fine-tuned (hebocr v4)', [L_RASHI]: 'Rashi script — pninim.org heb_rashi, fine-tuned (hebocr v4)' };
+export const ENGINE_MODELS = { [L_SQ]: 'Hebrew (square script) — tessdata_best heb, fine-tuned (hebocr v4)', [L_RASHI]: 'Rashi script — pninim.org heb_rashi, fine-tuned on worn prints (hebocr v5)' };
 
 // ---------------------------------------------------------------- loading
 let tessLoading;
@@ -119,6 +119,60 @@ export function dictRatio(t) { if (!RANK) return 0; const ws = t.split(/\s+/).ma
 // Tesseract writes ' and " for geresh/gershayim; use the Hebrew marks between Hebrew letters
 export function hebPunct(t) { return t.replace(/([\u05D0-\u05EA])"(?=[\u05D0-\u05EA])/g, '$1״').replace(/([\u05D0-\u05EA])'(?=[\s\u05D0-\u05EA:.,;]|$)/gm, '$1׳'); }
 
+
+// ---------------------------------------------------------------- word model (v5, Nov 2026)
+// Sefaria n-gram word model (60M words of rabbinic Hebrew/Aramaic, public texts; unigrams + bigrams, pruned)
+// used as a beam re-scorer after OCR: each word may be swapped for a look-alike-letter variant when the
+// variant is a real word that fits the neighbouring words better. Letter costs were learned from OCR errors
+// on held-out dev lines. No source text is looked up: this is a general language model.
+const LM_ALT = {"ס":[["ק",3.085],["ת",4.875],["מ",4.886],["ש",5.196],["ז",5.384],["ט",5.481],["כ",5.519]],"פ":[["ק",3.025],["ע",3.221],["ס",3.555],["ט",4.094],["כ",4.132],["מ",4.193],["ש",4.503]],"ו":[["ז",1.578],["ד",2.308],["י",2.441],["נ",2.802],["ג",3.773],["כ",4.315],["מ",4.375]],"נ":[["ג",3.08],["ל",4.094],["כ",4.22],["צ",4.727],["מ",4.886],["ע",5.167],["ס",5.347]],"ד":[["כ",3.622],["ר",4.81],["ק",5.165],["פ",5.389],["ח",5.787],["ה",5.973],["י",6.467]],"ז":[["צ",3.223],["א",4.76],["ט",5.481],["ד",5.849],["ק",5.858],["ו",5.973],["פ",6.082]],"ר":[["ד",2.499],["ח",3.59],["ג",4.466],["כ",4.671],["נ",4.863],["י",4.926],["ק",5.165]],"כ":[["ב",2.639],["מ",3.346],["פ",3.517],["ס",3.738],["נ",4.612],["ט",4.787],["ד",5.156]],"ח":[["ת",2.697],["ק",3.46],["ה",4.507],["מ",4.518],["ר",4.944],["ס",5.347],["ו",5.413]],"ל":[["צ",3.023],["פ",3.885],["ר",4.587],["א",4.76],["נ",4.863],["ג",5.159],["ע",5.167]],"ע":[["ט",2.842],["צ",3.223],["ש",3.286],["ג",4.06],["מ",4.088],["ח",4.401],["פ",4.984]],"ת":[["ח",2.954],["ק",3.219],["ה",4.299],["נ",5.71],["ר",5.791],["מ",5.985],["א",6.059]],"ט":[["ע",3.321],["מ",3.865],["נ",4.036],["ש",4.503],["כ",4.671],["ק",4.759],["ס",5.347]],"י":[["ו",4.363],["ז",4.691],["ג",5.159],["ע",5.167],["א",5.212],["נ",5.423],["ח",5.787]],"ב":[["צ",3.223],["מ",3.255],["ג",3.55],["כ",3.673],["ש",3.874],["ד",4.597],["נ",4.612]],"מ":[["ס",2.256],["ח",3.707],["ט",3.871],["פ",4.003],["נ",4.411],["א",4.45],["ג",4.466]],"א":[["ק",4.248],["ת",4.588],["ח",4.688],["ז",4.691],["צ",4.727],["ל",5.136],["פ",5.389]],"ש":[["ט",2.39],["ס",3.738],["מ",3.948],["ע",3.963],["ק",4.066],["פ",4.136],["ת",4.269]],"צ":[["ג",4.466],["ל",4.848],["ע",4.879],["ר",6.89],["ב",6.97],["מ",7.083],["א",7.158]],"ג":[["נ",3.718],["ל",5.136],["ב",5.178],["ז",5.384],["צ",5.421],["א",5.771],["ח",5.787]],"ה":[["ת",2.883],["ק",2.968],["ח",3.148],["ד",4.24],["ר",4.81],["כ",5.231],["י",5.368]],"ק":[["ת",5.568],["ה",5.973],["נ",6.809]],"ם":[]};
+const LM_P = { lam: 1.0, cw: 1.2, oov: -20, bo: -0.9, minlen: 2, beam: 8, maxFrontier: 3000 };
+let lmLoading; let LMU = null, LMB = null, LMLOGN = 0;
+export function loadLM() {
+  return lmLoading ||= Promise.all([fetch(LANG_BASE + '/lm_words.txt').then(r => { if (!r.ok) throw new Error('lm words ' + r.status); return r.text(); }), fetch(LANG_BASE + '/lm_bigrams.txt').then(r => { if (!r.ok) throw new Error('lm bigrams ' + r.status); return r.text(); })])
+    .then(([wt, bt]) => {
+      const U = new Map(); const ws = []; const L = wt.split('\n'); LMLOGN = Math.log(+L[0].slice(1));
+      for (let i = 1; i < L.length; i++) { const l = L[i]; if (!l) continue; const t = l.indexOf('\t'); const w = l.slice(0, t); U.set(w, +l.slice(t + 1)); ws.push(w); }
+      const B = new Map(); for (const l of bt.split('\n')) { if (!l) continue; const [a, b, c] = l.split(' '); B.set(ws[parseInt(a, 36)] + ' ' + ws[parseInt(b, 36)], parseInt(c, 36)); }
+      LMU = U; LMB = B; return true;
+    });
+}
+const lmFold = c => UNFIN[c] || c;
+function lmCands(w) {
+  const f = [...w].map(lmFold).join(''); const out = new Map([[w, 0]]); let fr = [[f, 0]]; const depth = w.length >= 4 ? 2 : 1;
+  for (let d = 0; d < depth; d++) { const nf = []; for (const [s, cst] of fr) { for (let i = 0; i < s.length; i++) { const alts = LM_ALT[s[i]]; if (!alts) continue; for (const [t, c] of alts) { const s2 = s.slice(0, i) + t + s.slice(i + 1); const cc = cst + c; if (nf.length < LM_P.maxFrontier) nf.push([s2, cc]); const ws = fixSofit(s2); if (LMU.has(ws) && (!out.has(ws) || out.get(ws) > cc)) out.set(ws, cc); } } } fr = nf; }
+  return out;
+}
+function lmLine(cores, prev) {
+  const P = LM_P; let beams = new Map([[prev, [0, []]]]);
+  for (const w of cores) {
+    const nb = new Map();
+    if (w.length < P.minlen) { const k = LMU.has(w) ? w : null; for (const [, [s, path]] of beams) { if (!nb.has(k) || nb.get(k)[0] < s) nb.set(k, [s, path.concat([w])]); } beams = nb; continue; }
+    for (const [c, ccost] of lmCands(w)) {
+      const uc = LMU.get(c); const ul = uc ? Math.log(uc) - LMLOGN : null;
+      for (const [p, [s, path]] of beams) {
+        let lm; const bc = p !== null ? LMB.get(p + ' ' + c) : undefined;
+        if (bc && LMU.has(p)) lm = Math.log(bc / LMU.get(p)); else if (ul !== null) lm = P.bo + ul; else lm = P.bo + P.oov;
+        const sc = s + P.lam * lm - P.cw * ccost; const key = uc ? c : null;
+        if (!nb.has(key) || nb.get(key)[0] < sc) nb.set(key, [sc, path.concat([c])]);
+      }
+    }
+    beams = new Map([...nb.entries()].sort((a, b) => b[1][0] - a[1][0]).slice(0, P.beam));
+  }
+  let best = null; for (const e of beams) if (!best || e[1][0] > best[1][0]) best = e;
+  return { path: best[1][1], prev: best[0] };
+}
+// returns { text, changes: [{from, to}] }
+export function lmCorrect(text) {
+  if (!LMU) return null; const changes = []; let prev = null;
+  const out = text.split('\n').map(line => {
+    const toks = line.split(' '); const cores = toks.map(t => { const core = t.replace(/[^\u05D0-\u05EA]/g, ''); return (/[׳״'"]/.test(t) || !core) ? '' : core; });
+    const r = lmLine(cores, prev); prev = r.prev;
+    return toks.map((t, i) => { const c = cores[i], n = r.path[i]; if (c && n !== c) { changes.push({ from: c, to: n }); return t.includes(c) ? t.replace(c, n) : n; } return t; }).join(' ');
+  }).join('\n');
+  return { text: out, changes };
+}
+
 // lines of one recognition, from Tesseract's block tree
 function linesOf(data) { const out = []; for (const b of (data.blocks || [])) for (const p of (b.paragraphs || [])) { for (const l of (p.lines || [])) { const t = (l.words || []).map(x => x.text).join(' ').trim(); if (t) out.push({ y: (l.bbox.y0 + l.bbox.y1) / 2, h: l.bbox.y1 - l.bbox.y0, text: t, conf: l.confidence }); } out.push({ para: true }); } return out; }
 function cropCanvas(c, x0, x1) { const o = canvasFrom(null, x1 - x0, c.height); o.getContext('2d').drawImage(c, x0, 0, x1 - x0, c.height, 0, 0, x1 - x0, c.height); return o; }
@@ -130,6 +184,8 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   const pp = preprocess(srcCanvas, { script, binarize, straighten });
   const langs = script === 'square' ? [L_SQ] : script === 'rashi' ? [L_RASHI, L_SQ] : [L_SQ, L_RASHI];
   await loadWords().catch(() => null);
+  const USE_LM = !(typeof window !== 'undefined' && window.__HOCR_NOLM);
+  if (USE_LM) await loadLM().catch(e => { console.warn('word model not loaded: ' + e.message); });
   const res = {}; // lang -> [column lines]
   for (const lang of langs) {
     const wk = await getWorker(lang, say);
@@ -154,8 +210,8 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   }
   let text = colTexts.length > 1 ? colTexts.map((t, i) => `[[טור ${i + 1}]]\n${t}`).join('\n\n') : colTexts[0];
   text = hebPunct(text);
-  const pc = postCorrect(text);
-  const steps = [...pp.steps, `${lead === L_SQ ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === L_SQ ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the word list`];
+  const pc = (USE_LM && lmCorrect(text)) || postCorrect(text);
+  const steps = [...pp.steps, `${lead === L_SQ ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === L_SQ ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the ${LMU && USE_LM ? 'Sefaria word model' : 'word list'}`];
   return { text: pc.text, raw: text, changes: pc.changes, steps, lead, scores, pp };
 }
 

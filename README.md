@@ -23,3 +23,9 @@ The idea of listing each automatic fix comes from the free OCR page that ivelt.c
 No server. No key is stored anywhere but the user's own browser.
 
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
+
+
+## v5 engine (Nov 9, 2026)
+- Rashi model `heb_rashi5`: `heb_rashi4`'s base (hr3) fine-tuned for 35,000 more iterations on ~16.7k real Prague 1815 and Vilna Rashi lines, each also in 2 artificially worn copies (about 20 kinds of wear: ink bleed, broken strokes, erosion, blur, noise, uneven light, foxing, stains, bleed-through, skew, warp and more).
+- A Sefaria word model (`tessdata/lm_words.txt`, `tessdata/lm_bigrams.txt`: 243k words and 318k word pairs counted from public Sefaria texts, the test tractates left out) re-scores look-alike letters after OCR. It never looks up the source text.
+- Same Rosh Hashana 2a test crops, Engine mode: Rashi 16.4% → 14.6% wrong letters, square 4.1% → 2.8%.
