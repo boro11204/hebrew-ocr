@@ -80,7 +80,13 @@ export function cleanLayout(b, w, h, pitch, cols) {
       const cs = [0, ...cuts, w]; const nc = [];
       if (cuts.length) { cs[0] = Math.max(0, Math.round(L0 - 1.5 * xh)); cs[cs.length - 1] = Math.min(w, Math.round(R0 + 1.5 * xh)); }
       for (let i = 0; i + 1 < cs.length; i++) if (cs[i + 1] - cs[i] > 0.15 * span) nc.push([cs[i], cs[i + 1]]);
-            if (nc.length > cols.length) { cols = nc.reverse(); notes.columnsFound = cols.length; }
+      // v8: the letter-based columns win when they find at least as many columns as the pixel-gutter guess,
+      // and a pixel-gutter cut with letters running through it (no real gap) is dropped. (Auto mode on page 25
+      // had a false cut beside the right margin, which hid the real gutter and read both columns as one.)
+      const realGap = cx => { const q0 = Math.max(0, Math.round(cx - 0.6 * xh)), q1 = Math.min(w - 1, Math.round(cx + 0.6 * xh)); let m = Infinity; for (let q = q0; q <= q1; q++) m = Math.min(m, sp[q]); return m < 0.35 * level; };
+      const oldCuts = cols.map(c => c[0]).filter(x => x > 0).filter(x => x > L0 && x < R0);
+      const falseCut = oldCuts.some(cx => !realGap(cx));
+      if (nc.length > cols.length || (nc.length >= 2 && nc.length === cols.length) || falseCut) { cols = nc.slice().reverse(); notes.columnsFound = cols.length; }
     }
   }
   // 3. text lines of each column

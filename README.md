@@ -25,6 +25,11 @@ No server. No key is stored anywhere but the user's own browser.
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
 
 
+## v8 engine (Nov 10, 2026)
+- Column fix for Auto mode (`layout.js`): the engine's first column guess could put a false cut beside the margin, which hid the real gutter, so a two-column page was read straight across. Now the letter-based column finder in page cleanup wins when it finds at least as many columns, and a cut with letters running through it is dropped.
+- 10-page Prague test (about 39,000 letters, never trained on), Auto mode: 9.32% → 2.12% wrong letters (page 25: 71.0% → 2.1%). Rashi mode unchanged at 2.15%. No page got worse. Old Rosh Hashana 2a crop unchanged (Rashi 10.56%, Auto 11.11%); square unchanged at 2.79%.
+- Models unchanged (`heb_rashi6` and the Sefaria word model).
+
 ## v7 engine (Nov 10, 2026)
 - Page cleanup before reading (`layout.js`, on by default, checkbox "Page cleanup" to turn it off): finds the main text block and its columns and drops running headers, page numbers, catchwords, margin notes, specks and borders. Runs in the browser, offline. It never looks up the source text.
 - Models unchanged: Rashi and Auto mode still use `heb_rashi6`; the Sefaria word model is unchanged.
