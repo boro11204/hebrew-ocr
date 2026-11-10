@@ -1,4 +1,4 @@
-# Hebrew OCR (v3, Nov 8 2026)
+# Hebrew OCR (v3, Nov 8 2026; engine v9 Nov 10 2026)
 
 Free Hebrew OCR in the browser for seforim, Rashi script, old prints and Yiddish. Live at https://hebrew-ocr.sites.tab.bot
 
@@ -24,6 +24,11 @@ No server. No key is stored anywhere but the user's own browser.
 
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
 
+
+## v9 engine (Nov 10, 2026)
+- New Rashi model `heb_rashi7` (used by Rashi and Auto mode): `heb_rashi6` fine-tuned on 24,013 new real Rashi and Tosafot lines from 310 pages of the Vilna Romm Shas (1882 and 1925 printings, archive.org scans, 31 tractates). Labels come from Sefaria's Rashi (Vilna edition), Tosafot and Rashbam texts, matched to each printed line. A line was kept only when the match was exact apart from look-alike letters, or when the lines above and below it pinned the text. Training: 3 stages (7,000 iterations at learning rate 2e-5, then 5,000 at 1e-5, then 5,000 at 1e-5 with more worn copies). Each stage mixed 9,000 Vilna lines (40–65% artificially worn), 6,000 earlier Prague lines and 1,500 lines heavy in look-alike letters. Pages near the test pages were left out.
+- 10-page Prague test (never trained on): Rashi mode 2.15% → 2.00% wrong letters, Auto mode 2.12% → 2.05% (8 of 10 pages better in each mode). Old Rosh Hashana 2a crop: Rashi 10.56% → 9.65%, Auto unchanged at 11.11%. Square unchanged at 2.79%. Held-out Vilna lines: 1.74% → 1.58%. Gold test lines: 1.52% → 1.30%.
+- `heb_rashi6` stays in `tessdata/`. Files load as `?v=11`.
 
 ## v8 engine (Nov 10, 2026)
 - Column fix for Auto mode (`layout.js`): the engine's first column guess could put a false cut beside the margin, which hid the real gutter, so a two-column page was read straight across. Now the letter-based column finder in page cleanup wins when it finds at least as many columns, and a cut with letters running through it is dropped.

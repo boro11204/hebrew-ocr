@@ -1,6 +1,6 @@
 import { MODELS, AUTO_CHAIN, QUALITY_CHAIN, API_BASE, buildRequest, endpoint, extractText, classifyError,
-  pacificDay, applyOptions, allText, buildDocx, parseRange, pageTitle, fixFinals } from './core.js?v=4';
-import { enginePage, pdfPageBytes, canvasFrom } from './engine.js?v=10';
+  pacificDay, applyOptions, allText, buildDocx, parseRange, pageTitle, fixFinals } from './core.js?v=11';
+import { enginePage, pdfPageBytes, canvasFrom } from './engine.js?v=11';
 
 const $ = s => document.querySelector(s);
 const LS = { key: 'hocr.key', settings: 'hocr.settings', usage: 'hocr.usage' };
