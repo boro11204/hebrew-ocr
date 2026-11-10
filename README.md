@@ -29,6 +29,8 @@ Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic
 - Column fix for Auto mode (`layout.js`): the engine's first column guess could put a false cut beside the margin, which hid the real gutter, so a two-column page was read straight across. Now the letter-based column finder in page cleanup wins when it finds at least as many columns, and a cut with letters running through it is dropped.
 - 10-page Prague test (about 39,000 letters, never trained on), Auto mode: 9.32% → 2.12% wrong letters (page 25: 71.0% → 2.1%). Rashi mode unchanged at 2.15%. No page got worse. Old Rosh Hashana 2a crop unchanged (Rashi 10.56%, Auto 11.11%); square unchanged at 2.79%.
 - Models unchanged (`heb_rashi6` and the Sefaria word model).
+- Dirty and faint pages: when a stain, fold or show-through makes the reader skip or garble a run of lines, page cleanup already knows where those lines are, so they are read again on their own (and kept only when that gives more letters). When few words come out right on a page (a faint, blurry, low-contrast scan), it is also read from the black & white image and the version with more real words is kept. Test on synthetic dirt (pages 15, 35, 105, Rashi mode): stains/specks/foxing/show-through/fold 10.8% -> 6.0% wrong letters; faint blurry low-contrast JPEG 45.6% -> 19.6%. Clean pages, old crop and square are unchanged.
+- Files load as `?v=10`.
 
 ## v7 engine (Nov 10, 2026)
 - Page cleanup before reading (`layout.js`, on by default, checkbox "Page cleanup" to turn it off): finds the main text block and its columns and drops running headers, page numbers, catchwords, margin notes, specks and borders. Runs in the browser, offline. It never looks up the source text.

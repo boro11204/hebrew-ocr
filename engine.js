@@ -1,11 +1,12 @@
 // Hebrew OCR — offline engine (no AI). Runs fully in the browser.
 // Preprocessing (deskew, adaptive binarization, denoise, line straightening, column detection,
-// v7: page cleanup — headers, page numbers, catchwords, margin notes, specks and borders removed before reading),
+// v7: page cleanup — headers, page numbers, catchwords, margin notes, specks and borders removed before reading;
+// v8: column fix, re-reading lines a stain or fold made Tesseract skip, black & white fallback for faint scans),
 // Tesseract.js with two Apache-2.0 models (Google's tessdata_best "heb" and pninim.org's "heb_rashi"),
 // line-by-line voting between them, and word-list post-correction tuned for Rashi letter confusions.
 // Everything here is plain code: no key, no server, no AI.
 
-import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=9';
+import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=10';
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
 // v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
@@ -103,13 +104,13 @@ export function preprocess(srcCanvas, opts = {}) {
   let cols = opts.columns === false ? [[0, w]] : findColumns(b, w, h);
   // v7 page cleanup (on by default): keep only the main text block
   const noClean = typeof window !== 'undefined' && window.__HOCR_NOCLEAN;
-  let clean = null;
+  let clean = null; let bands = null;
   if (opts.clean !== false && !noClean && opts.columns !== false) {
-    try { const r = cleanLayout(b, w, h, pitch, cols); applyClean(r, b, gray, w, h); cols = r.cols.filter((c, k) => r.keepCols.includes(k)); if (!cols.length) cols = [[0, w]]; clean = r.notes; steps.push(cleanSummary(r.notes)); }
+    try { const r = cleanLayout(b, w, h, pitch, cols); applyClean(r, b, gray, w, h); cols = r.cols.filter((c, k) => r.keepCols.includes(k)); bands = cols.length ? r.keepCols.map(k => (r.colInfo[k] ? r.colInfo[k].bands : []).filter(B => !B.drop).map(B => [B.y0, B.y1])) : null; if (!cols.length) cols = [[0, w]]; clean = r.notes; steps.push(cleanSummary(r.notes)); }
     catch (e) { console.warn('page cleanup skipped: ' + e.message); steps.push('page cleanup skipped'); }
   }
   if (cols.length > 1) steps.push(`${cols.length} columns found`);
-  return { bin: grayToCanvas(b, w, h), gray: grayToCanvas(gray, w, h), w, h, cols, steps, scale, angle: ang, clean };
+  return { bin: grayToCanvas(b, w, h), gray: grayToCanvas(gray, w, h), w, h, cols, steps, scale, angle: ang, clean, bands };
 }
 
 // ---------------------------------------------------------------- text helpers
@@ -124,7 +125,8 @@ const logf = w => { const r = RANK.get(w); return r === undefined ? null : -Math
 function bestWord(core) { const cur = fixSofit(core); const b0 = logf(cur); let best = [b0 === null ? -99 : b0, cur]; let frontier = [[cur, 0]]; const depth = cur.length >= 4 ? 2 : 1; for (let d = 0; d < depth; d++) { const nf = []; for (const [w, cost] of frontier) { for (let i = 0; i < w.length; i++) { for (const [r, wt] of (CONF[w[i]] || [])) { const c = fixSofit(w.slice(0, i) + r + w.slice(i + 1)); const cc = cost + SUBCOST / wt; if (nf.length < 400) nf.push([c, cc]); const lf = logf(c); if (lf !== null && lf - cc > best[0]) best = [lf - cc, c]; } } } frontier = nf; } return best[1]; }
 // word-list post-correction; returns { text, changes: [{from, to}] }
 export function postCorrect(text) { if (!RANK) return { text, changes: [] }; const changes = []; const out = text.split('\n').map(line => line.split(' ').map(tok => { if (/[׳״'"]/.test(tok)) return tok; const core = tok.replace(/[^\u05D0-\u05EA]/g, ''); if (core.length < 2) return tok; const c = bestWord(core); if (c === core) return tok; changes.push({ from: core, to: c }); return tok.includes(core) ? tok.replace(core, c) : c; }).join(' ')).join('\n'); return { text: out, changes }; }
-export function dictRatio(t) { if (!RANK) return 0; const ws = t.split(/\s+/).map(w => w.replace(/[^\u05D0-\u05EA]/g, '')).filter(w => w.length >= 2); if (!ws.length) return 0; return ws.filter(w => RANK.has(fixSofit(w))).length / ws.length; }
+export function dictMass(t) { if (!RANK) return 0; return t.split(/\s+/).map(w => w.replace(/[^\u05D0-\u05EA]/g, '')).filter(w => w.length >= 2 && RANK.has(fixSofit(w))).reduce((s, w) => s + w.length, 0); }
+function dictRatio(t) { if (!RANK) return 0; const ws = t.split(/\s+/).map(w => w.replace(/[^\u05D0-\u05EA]/g, '')).filter(w => w.length >= 2); if (!ws.length) return 0; return ws.filter(w => RANK.has(fixSofit(w))).length / ws.length; }
 // Tesseract writes ' and " for geresh/gershayim; use the Hebrew marks between Hebrew letters
 export function hebPunct(t) { return t.replace(/([\u05D0-\u05EA])"(?=[\u05D0-\u05EA])/g, '$1״').replace(/([\u05D0-\u05EA])'(?=[\s\u05D0-\u05EA:.,;]|$)/gm, '$1׳'); }
 
@@ -186,6 +188,41 @@ export function lmCorrect(text) {
 function linesOf(data) { const out = []; for (const b of (data.blocks || [])) for (const p of (b.paragraphs || [])) { for (const l of (p.lines || [])) { const t = (l.words || []).map(x => x.text).join(' ').trim(); if (t) out.push({ y: (l.bbox.y0 + l.bbox.y1) / 2, h: l.bbox.y1 - l.bbox.y0, text: t, conf: l.confidence }); } out.push({ para: true }); } return out; }
 function cropCanvas(c, x0, x1) { const o = canvasFrom(null, x1 - x0, c.height); o.getContext('2d').drawImage(c, x0, 0, x1 - x0, c.height, 0, 0, x1 - x0, c.height); return o; }
 
+
+function cropRect(c, x0, x1, y0, y1) { const o = canvasFrom(null, x1 - x0, y1 - y0); o.getContext('2d').drawImage(c, x0, y0, x1 - x0, y1 - y0, 0, 0, x1 - x0, y1 - y0); return o; }
+const nLet = s => (s.match(/[\u05D0-\u05EA]/g) || []).length;
+// v8: Tesseract's own layout step sometimes skips or garbles a stretch of lines (a stain, fold or show-through
+// in the column). Page cleanup already knows where every text line is; any run of 2+ lines with no real
+// reading is read again on its own as one block, and kept when it gives more letters.
+async function fillGaps(wk, cc, L, bands) {
+  if (!bands || bands.length < 8) return { L, n: 0 };
+  const real = L.filter(x => !x.para); if (!real.length) return { L, n: 0 };
+  const counts = real.map(x => nLet(x.text)).sort((a, b) => a - b); const md = counts[counts.length >> 1];
+  const good = real.filter(x => nLet(x.text) >= Math.max(3, 0.35 * md));
+  const bh = bands.map(B => B[1] - B[0] + 1).sort((a, b) => a - b)[bands.length >> 1];
+  const covered = B => { const cy = (B[0] + B[1]) / 2; return good.some(x => Math.abs(x.y - cy) <= 0.6 * Math.max(x.h, bh)); };
+  const runs = []; let cur = [];
+  for (const B of bands) { if (!covered(B)) cur.push(B); else { if (cur.length >= 2) runs.push(cur); cur = []; } }
+  if (cur.length >= 2) runs.push(cur);
+  if (!runs.length) return { L, n: 0 };
+  let n = 0;
+  for (const run of runs) {
+    const y0 = Math.max(0, Math.round(run[0][0] - 0.5 * bh)), y1 = Math.min(cc.height, Math.round(run[run.length - 1][1] + 0.5 * bh));
+    if (y1 - y0 < 2 * bh) continue;
+    await wk.setParameters({ tessedit_pageseg_mode: '6' });
+    let got = [];
+    try { const { data } = await wk.recognize(cropRect(cc, 0, cc.width, y0, y1), {}, { blocks: true, text: false }); got = linesOf(data).filter(x => !x.para).map(x => ({ ...x, y: x.y + y0 })); }
+    finally { await wk.setParameters({ tessedit_pageseg_mode: '4' }); }
+    const inR = x => !x.para && x.y >= y0 && x.y <= y1;
+    const oldLet = L.filter(inR).reduce((s, x) => s + nLet(x.text), 0), newLet = got.reduce((s, x) => s + nLet(x.text), 0);
+    if (newLet < 1.2 * oldLet + 10) continue;
+    const keep = L.filter(x => !inR(x));
+    let idx = keep.findIndex(x => !x.para && x.y > y1); if (idx < 0) idx = keep.length;
+    keep.splice(idx, 0, ...got); L = keep; n += run.length;
+  }
+  return { L, n };
+}
+
 // OCR one page. script: 'square' | 'rashi' | 'mixed'. Returns { text, changes, steps, models, perModel }
 export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto', straighten = true, clean = true, onStatus } = {}) {
   const say = t => onStatus && onStatus(t);
@@ -195,21 +232,35 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   await loadWords().catch(() => null);
   const USE_LM = !(typeof window !== 'undefined' && window.__HOCR_NOLM);
   if (USE_LM) await loadLM().catch(e => { console.warn('word model not loaded: ' + e.message); });
-  const res = {}; // lang -> [column lines]
+  // lang -> [column lines]
+  const readAll = async img => { const res = {}; const refilled = {};
   for (const lang of langs) {
     const wk = await getWorker(lang, say);
     await wk.setParameters({ tessedit_pageseg_mode: '4' });
     res[lang] = [];
     for (let i = 0; i < pp.cols.length; i++) {
       say(`Engine: reading ${pp.cols.length > 1 ? `column ${i + 1} of ${pp.cols.length} ` : ''}with the ${lang === L_SQ ? 'Hebrew' : 'Rashi'} model…`);
-      const [x0, x1] = pp.cols[i]; const src = USE_GRAY ? pp.gray : pp.bin; const cc = pp.cols.length > 1 ? cropCanvas(src, x0, x1) : src;
+      const [x0, x1] = pp.cols[i]; const src = img; const cc = pp.cols.length > 1 ? cropCanvas(src, x0, x1) : src;
       const { data } = await wk.recognize(cc, {}, { blocks: true, text: false });
-      res[lang].push(linesOf(data));
+      const fg = await fillGaps(wk, cc, linesOf(data), pp.bands && pp.bands[i]);
+      if (fg.n) refilled[lang] = (refilled[lang] || 0) + fg.n;
+      res[lang].push(fg.L);
     }
   }
+  return { res, refilled }; };
+  let { res, refilled } = await readAll(USE_GRAY ? pp.gray : pp.bin);
   // which model fits this page better (share of real words) — that one leads, the other may replace single lines
   const pageText = l => res[l].flat().filter(x => !x.para).map(x => x.text).join(' ');
   const scores = Object.fromEntries(langs.map(l => [l, dictRatio(pageText(l))]));
+  // v8: a faint or blurry scan reads better from the black & white image than from the gray one;
+  // when few words come out right, read it that way too and keep whichever gives more real words.
+  let faint = false;
+  if (USE_GRAY && Math.max(...Object.values(scores)) < 0.88) {
+    const R2 = await readAll(pp.bin);
+    const pt2 = l => R2.res[l].flat().filter(x => !x.para).map(x => x.text).join(' ');
+    const m1 = Math.max(...langs.map(l => dictMass(pageText(l)))), m2 = Math.max(...langs.map(l => dictMass(pt2(l))));
+    if (m2 > 1.05 * m1) { res = R2.res; refilled = R2.refilled; faint = true; for (const l of langs) scores[l] = dictRatio(pageText(l)); }
+  }
   const lead = langs.slice().sort((a, b) => scores[b] - scores[a])[0]; const other = langs.find(l => l !== lead);
   let swapped = 0; const colTexts = [];
   for (let i = 0; i < pp.cols.length; i++) {
@@ -220,7 +271,8 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   let text = colTexts.length > 1 ? colTexts.map((t, i) => `[[טור ${i + 1}]]\n${t}`).join('\n\n') : colTexts[0];
   text = hebPunct(text);
   const pc = (USE_LM && lmCorrect(text)) || postCorrect(text);
-  const steps = [...pp.steps, `${lead === L_SQ ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === L_SQ ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the ${LMU && USE_LM ? 'Sefaria word model' : 'word list'}`];
+  const extra = []; if (faint) extra.push('faint scan: read from the black & white image'); if (refilled[lead]) extra.push(`re-read ${refilled[lead]} line${refilled[lead] === 1 ? '' : 's'} the first pass missed`);
+  const steps = [...pp.steps, ...extra, `${lead === L_SQ ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === L_SQ ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the ${LMU && USE_LM ? 'Sefaria word model' : 'word list'}`];
   return { text: pc.text, raw: text, changes: pc.changes, steps, lead, scores, pp };
 }
 
