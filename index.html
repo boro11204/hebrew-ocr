@@ -116,8 +116,9 @@
       <div class="modes">
         <label>Black &amp; white <select id="binarizeSel"><option value="auto">Auto</option><option value="adaptive">Adaptive (shadows, phone photos)</option><option value="otsu">Simple (clean scans)</option></select></label>
         <label class="chk"><input type="checkbox" id="straightenChk" checked> Straighten curved lines (book photos)</label>
+        <label class="chk"><input type="checkbox" id="cleanChk" checked> Page cleanup: skip headers, page numbers, margin notes and specks</label>
       </div>
-      <p class="muted small">Every page is enlarged to the best size for its letters, contrast-boosted, de-speckled, deskewed, curved lines are straightened, columns are found and read right to left.</p>
+      <p class="muted small">Every page is enlarged to the best size for its letters, contrast-boosted, de-speckled, deskewed, curved lines are straightened, headers, page numbers, catchwords, margin notes and specks are removed (page cleanup, can be turned off), columns are found and read right to left.</p>
     </details>
     <div class="row wrap-row">
       <button id="btnRun" class="primary big" disabled>Start OCR</button>
@@ -153,6 +154,6 @@
 </footer>
 
 <dialog id="zoom"><img id="zoomImg" alt="Page"><button id="zoomClose" class="primary small">Close</button></dialog>
-<script type="module" src="app.js?v=7"></script>
+<script type="module" src="app.js?v=8"></script>
 </body>
 </html>

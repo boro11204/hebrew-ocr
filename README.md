@@ -25,6 +25,12 @@ No server. No key is stored anywhere but the user's own browser.
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
 
 
+## v7 engine (Nov 10, 2026)
+- Page cleanup before reading (`layout.js`, on by default, checkbox "Page cleanup" to turn it off): finds the main text block and its columns and drops running headers, page numbers, catchwords, margin notes, specks and borders. Runs in the browser, offline. It never looks up the source text.
+- Models unchanged: Rashi and Auto mode still use `heb_rashi6`; the Sefaria word model is unchanged.
+- New bigger test: 10 full pages of the Prague 1815 print (pages 15, 25 … 105, never used in training), about 39,000 letters. Rashi mode: 52.4% → 2.2% wrong letters (the old engine read straight across both columns on most of these pages). Auto mode: 59.4% → 9.3%. Square test crop unchanged at 2.8%. Old Rosh Hashana 2a Rashi crop: 11.1% → 10.6%.
+- Checked that cleanup keeps all real text: on every test page the letters and lines kept match the true text (within 0.5%).
+
 ## v6 engine (Nov 10, 2026)
 - Rashi model `heb_rashi6` (now used by Rashi and Auto mode): `heb_rashi5` fine-tuned on the look-alike Rashi letters (ב/כ, ת/ש/ט, ן/ך, כ/נ, ג/נ and others): real Prague 1815 lines weighted toward those letters, synthetic minimal-pair words in Rashi fonts with wear aimed at the strokes that tell them apart, then a low-rate pass on 2,496 extra real Vilna lines so the rest of the alphabet holds. `heb_rashi5` stays in `tessdata/`.
 - The Sefaria word model is unchanged.

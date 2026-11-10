@@ -1,13 +1,13 @@
 import { MODELS, AUTO_CHAIN, QUALITY_CHAIN, API_BASE, buildRequest, endpoint, extractText, classifyError,
   pacificDay, applyOptions, allText, buildDocx, parseRange, pageTitle, fixFinals } from './core.js?v=4';
-import { enginePage, pdfPageBytes, canvasFrom } from './engine.js?v=7';
+import { enginePage, pdfPageBytes, canvasFrom } from './engine.js?v=8';
 
 const $ = s => document.querySelector(s);
 const LS = { key: 'hocr.key', settings: 'hocr.settings', usage: 'hocr.usage' };
 const MAX_SIDE = 3072;
 
 // ---------------- settings ----------------
-const settings = Object.assign({ model: 'auto', lines: 'keep', nikud: 'keep', font: 'David', mode: 'both', script: 'mixed', straighten: true, binarize: 'auto' }, safeJSON(localStorage.getItem(LS.settings)));
+const settings = Object.assign({ model: 'auto', lines: 'keep', nikud: 'keep', font: 'David', mode: 'both', script: 'mixed', straighten: true, clean: true, binarize: 'auto' }, safeJSON(localStorage.getItem(LS.settings)));
 function safeJSON(s) { try { return JSON.parse(s) || {}; } catch { return {}; } }
 function saveSettings() { localStorage.setItem(LS.settings, JSON.stringify(settings)); }
 const modelSel = $('#modelSel');
@@ -17,6 +17,7 @@ modelSel.innerHTML = `<option value="auto">Auto — best free model, switches wh
 modelSel.value = settings.model;
 for (const k of ['mode', 'script', 'binarize']) { const el = $('#' + k + 'Sel'); if (el) { el.value = settings[k]; el.onchange = () => { settings[k] = el.value; saveSettings(); showMode(); updateRunBtn(); }; } }
 { const st = $('#straightenChk'); if (st) { st.checked = settings.straighten !== false; st.onchange = () => { settings.straighten = st.checked; saveSettings(); }; } }
+{ const cl = $('#cleanChk'); if (cl) { cl.checked = settings.clean !== false; cl.onchange = () => { settings.clean = cl.checked; saveSettings(); }; } }
 const needsKey = () => settings.mode !== 'engine';
 function showMode() {
   const m = settings.mode; const hint = $('#modeHint');
@@ -244,7 +245,7 @@ async function ocrPage(p, idx) {
   let draft = '';
   if (mode === 'engine' || mode === 'both') {
     try {
-      const r = await enginePage(await pageCanvas(p), { script, binarize: settings.binarize, straighten: settings.straighten,
+      const r = await enginePage(await pageCanvas(p), { script, binarize: settings.binarize, straighten: settings.straighten, clean: settings.clean !== false,
         onStatus: t => status(`Page ${idx + 1} of ${pages.length}: ${t}`) });
       p.text = r.text; p.model = 'engine'; p.status = 'done'; p.edited = false; p.notes = r.steps; p.changes = r.changes.map(c => ({ ...c, why: 'word list' }));
       draft = r.raw; p.raw = r.raw; p.lead = r.lead; renderResults();

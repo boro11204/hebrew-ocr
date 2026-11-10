@@ -1,9 +1,11 @@
 // Hebrew OCR — offline engine (no AI). Runs fully in the browser.
-// Preprocessing (deskew, adaptive binarization, denoise, line straightening, column detection),
+// Preprocessing (deskew, adaptive binarization, denoise, line straightening, column detection,
+// v7: page cleanup — headers, page numbers, catchwords, margin notes, specks and borders removed before reading),
 // Tesseract.js with two Apache-2.0 models (Google's tessdata_best "heb" and pninim.org's "heb_rashi"),
 // line-by-line voting between them, and word-list post-correction tuned for Rashi letter confusions.
 // Everything here is plain code: no key, no server, no AI.
 
+import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=8';
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
 // v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
@@ -98,9 +100,16 @@ export function preprocess(srcCanvas, opts = {}) {
   let mode = opts.binarize || 'auto'; if (mode === 'auto') mode = 'adaptive'; // adaptive measured better on both test pages; 'otsu' stays as an option
   const b = mode === 'adaptive' ? sauvola(g, w, h, (Math.max(15, Math.round((pitch || 40) * 0.6)) | 1)) : binarizeOtsu(g);
   steps.push(mode === 'adaptive' ? 'adaptive black & white' : 'black & white');
-  const cols = opts.columns === false ? [[0, w]] : findColumns(b, w, h);
+  let cols = opts.columns === false ? [[0, w]] : findColumns(b, w, h);
+  // v7 page cleanup (on by default): keep only the main text block
+  const noClean = typeof window !== 'undefined' && window.__HOCR_NOCLEAN;
+  let clean = null;
+  if (opts.clean !== false && !noClean && opts.columns !== false) {
+    try { const r = cleanLayout(b, w, h, pitch, cols); applyClean(r, b, gray, w, h); cols = r.cols.filter((c, k) => r.keepCols.includes(k)); if (!cols.length) cols = [[0, w]]; clean = r.notes; steps.push(cleanSummary(r.notes)); }
+    catch (e) { console.warn('page cleanup skipped: ' + e.message); steps.push('page cleanup skipped'); }
+  }
   if (cols.length > 1) steps.push(`${cols.length} columns found`);
-  return { bin: grayToCanvas(b, w, h), gray: grayToCanvas(gray, w, h), w, h, cols, steps, scale, angle: ang };
+  return { bin: grayToCanvas(b, w, h), gray: grayToCanvas(gray, w, h), w, h, cols, steps, scale, angle: ang, clean };
 }
 
 // ---------------------------------------------------------------- text helpers
@@ -178,10 +187,10 @@ function linesOf(data) { const out = []; for (const b of (data.blocks || [])) fo
 function cropCanvas(c, x0, x1) { const o = canvasFrom(null, x1 - x0, c.height); o.getContext('2d').drawImage(c, x0, 0, x1 - x0, c.height, 0, 0, x1 - x0, c.height); return o; }
 
 // OCR one page. script: 'square' | 'rashi' | 'mixed'. Returns { text, changes, steps, models, perModel }
-export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto', straighten = true, onStatus } = {}) {
+export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto', straighten = true, clean = true, onStatus } = {}) {
   const say = t => onStatus && onStatus(t);
   say('Engine: cleaning up the page image…');
-  const pp = preprocess(srcCanvas, { script, binarize, straighten });
+  const pp = preprocess(srcCanvas, { script, binarize, straighten, clean });
   const langs = script === 'square' ? [L_SQ] : script === 'rashi' ? [L_RASHI, L_SQ] : [L_SQ, L_RASHI];
   await loadWords().catch(() => null);
   const USE_LM = !(typeof window !== 'undefined' && window.__HOCR_NOLM);
@@ -217,7 +226,7 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
 
 // searchable PDF page: page image + invisible text layer, made by Tesseract's own PDF writer
 export async function pdfPageBytes(srcCanvas, script = 'mixed', onStatus) {
-  const pp = preprocess(srcCanvas, { script, columns: false });
+  const pp = preprocess(srcCanvas, { script, columns: false, clean: false });
   // keep the PDF light: page image at most 2000 px on the long side
   const s = Math.min(1, 2000 / Math.max(pp.w, pp.h)); const img = s < 1 ? canvasFrom(pp.gray, Math.round(pp.w * s), Math.round(pp.h * s)) : pp.gray;
   const lang = script === 'square' ? L_SQ : script === 'rashi' ? L_RASHI : L_SQ;
