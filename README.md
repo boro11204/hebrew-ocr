@@ -25,6 +25,11 @@ No server. No key is stored anywhere but the user's own browser.
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
 
 
+## v6 engine (Nov 10, 2026)
+- Rashi model `heb_rashi6` (now used by Rashi and Auto mode): `heb_rashi5` fine-tuned on the look-alike Rashi letters (ב/כ, ת/ש/ט, ן/ך, כ/נ, ג/נ and others): real Prague 1815 lines weighted toward those letters, synthetic minimal-pair words in Rashi fonts with wear aimed at the strokes that tell them apart, then a low-rate pass on 2,496 extra real Vilna lines so the rest of the alphabet holds. `heb_rashi5` stays in `tessdata/`.
+- The Sefaria word model is unchanged.
+- Same Rosh Hashana 2a test crops, Engine mode with the word model: Rashi 14.6% → 11.1% wrong letters (Auto mode 14.6% → 11.8%), square unchanged at 2.8%. On held-out real lines: 2.74% → 2.69%.
+
 ## v5 engine (Nov 9, 2026)
 - Rashi model `heb_rashi5`: `heb_rashi4`'s base (hr3) fine-tuned for 35,000 more iterations on ~16.7k real Prague 1815 and Vilna Rashi lines, each also in 2 artificially worn copies (about 20 kinds of wear: ink bleed, broken strokes, erosion, blur, noise, uneven light, foxing, stains, bleed-through, skew, warp and more).
 - A Sefaria word model (`tessdata/lm_words.txt`, `tessdata/lm_bigrams.txt`: 243k words and 318k word pairs counted from public Sefaria texts, the test tractates left out) re-scores look-alike letters after OCR. It never looks up the source text.

@@ -7,10 +7,10 @@
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
 // v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
-const L_SQ = (typeof window !== 'undefined' && window.__HOCR_SQ) || 'heb4', L_RASHI = (typeof window !== 'undefined' && window.__HOCR_RASHI) || 'heb_rashi5';
+const L_SQ = (typeof window !== 'undefined' && window.__HOCR_SQ) || 'heb4', L_RASHI = (typeof window !== 'undefined' && window.__HOCR_RASHI) || 'heb_rashi6';
 // v4 models read the cleaned gray image better than the black & white one (measured on Vilna RH 2a)
 const USE_GRAY = !(typeof window !== 'undefined' && window.__HOCR_GRAY === false);
-export const ENGINE_MODELS = { [L_SQ]: 'Hebrew (square script) — tessdata_best heb, fine-tuned (hebocr v4)', [L_RASHI]: 'Rashi script — pninim.org heb_rashi, fine-tuned on worn prints (hebocr v5)' };
+export const ENGINE_MODELS = { [L_SQ]: 'Hebrew (square script) — tessdata_best heb, fine-tuned (hebocr v4)', [L_RASHI]: 'Rashi script — pninim.org heb_rashi, fine-tuned on worn prints and look-alike letters (hebocr v6)' };
 
 // ---------------------------------------------------------------- loading
 let tessLoading;
