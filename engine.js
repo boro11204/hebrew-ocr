@@ -6,7 +6,8 @@
 // line-by-line voting between them, and word-list post-correction tuned for Rashi letter confusions.
 // Everything here is plain code: no key, no server, no AI.
 
-import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=12';
+import { findSectionStarts, applySectionBreaks } from './sections.js?v=13';
+import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=13';
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
 // v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
@@ -185,7 +186,7 @@ export function lmCorrect(text) {
 }
 
 // lines of one recognition, from Tesseract's block tree
-function linesOf(data) { const out = []; for (const b of (data.blocks || [])) for (const p of (b.paragraphs || [])) { for (const l of (p.lines || [])) { const t = (l.words || []).map(x => x.text).join(' ').trim(); if (t) out.push({ y: (l.bbox.y0 + l.bbox.y1) / 2, h: l.bbox.y1 - l.bbox.y0, text: t, conf: l.confidence }); } out.push({ para: true }); } return out; }
+function linesOf(data) { const out = []; for (const b of (data.blocks || [])) for (const p of (b.paragraphs || [])) { for (const l of (p.lines || [])) { const t = (l.words || []).map(x => x.text).join(' ').trim(); if (t) out.push({ y: (l.bbox.y0 + l.bbox.y1) / 2, h: l.bbox.y1 - l.bbox.y0, text: t, conf: l.confidence, x0: l.bbox.x0, x1: l.bbox.x1, words: (l.words || []).filter(x => x.text && x.text.trim()).map(x => ({ text: x.text, x0: x.bbox.x0, x1: x.bbox.x1, y0: x.bbox.y0, y1: x.bbox.y1 })) }); } out.push({ para: true }); } return out; }
 function cropCanvas(c, x0, x1) { const o = canvasFrom(null, x1 - x0, c.height); o.getContext('2d').drawImage(c, x0, 0, x1 - x0, c.height, 0, 0, x1 - x0, c.height); return o; }
 
 
@@ -263,15 +264,24 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   }
   const lead = langs.slice().sort((a, b) => scores[b] - scores[a])[0]; const other = langs.find(l => l !== lead);
   let swapped = 0; const colTexts = [];
+  // v13: where a new teshuva / numbered section starts (page layout only); marked with U+2063 on a copy of the text
+  const SECT = !(typeof window !== 'undefined' && window.__HOCR_NOSECT); const SM = '\u2063'; const colMarked = []; let nSect = 0;
   for (let i = 0; i < pp.cols.length; i++) {
     const A = res[lead][i], B = other ? res[other][i].filter(x => !x.para) : [];
     const lines = A.map(L => { if (L.para) return ''; if (!B.length) return L.text; const M = B.reduce((m, x) => Math.abs(x.y - L.y) < Math.abs(m.y - L.y) ? x : m, B[0]); if (Math.abs(M.y - L.y) > L.h * 0.6) return L.text; const s0 = dictRatio(L.text) * 100 + L.conf * 0.2, s1 = dictRatio(M.text) * 100 + M.conf * 0.2; if (s1 > s0 + 20) { swapped++; return M.text; } return L.text; });
     colTexts.push(lines.join('\n').replace(/\n{3,}/g, '\n\n').trim());
+    const sm = SECT ? findSectionStarts(A) : new Map();
+    colMarked.push(lines.map((t, j) => sm.has(j) && t ? SM + (sm.get(j).split ? 's' : 't') + (sm.get(j).noBlank ? 'n' : 'b') + t : t).join('\n').replace(/\n{3,}/g, '\n\n').trim());
   }
   let text = colTexts.length > 1 ? colTexts.map((t, i) => `[[טור ${i + 1}]]\n${t}`).join('\n\n') : colTexts[0];
+  const marked = colMarked.length > 1 ? colMarked.map((t, i) => `[[טור ${i + 1}]]\n${t}`).join('\n\n') : (colMarked[0] || '');
+  const lineMarks = new Map();
+  if (SECT && marked.replace(/\u2063[st][nb]/g, '') === text) marked.split('\n').forEach((l, i) => { if (l[0] === SM) lineMarks.set(i, { split: l[1] === 's', noBlank: l[2] === 'n' }); });
+  nSect = lineMarks.size;
   text = hebPunct(text);
   const pc = (USE_LM && lmCorrect(text)) || postCorrect(text);
-  const extra = []; if (faint) extra.push('faint scan: read from the black & white image'); if (refilled[lead]) extra.push(`re-read ${refilled[lead]} line${refilled[lead] === 1 ? '' : 's'} the first pass missed`);
+  if (nSect) { const rawLines = text.split('\n').length; if (pc.text.split('\n').length === rawLines) pc.text = applySectionBreaks(pc.text, lineMarks); text = applySectionBreaks(text, lineMarks); }
+  const extra = []; if (nSect) extra.push(`${nSect} new section${nSect === 1 ? '' : 's'} found (a teshuva / numbered heading starting on the page): blank line added before ${nSect === 1 ? 'it' : 'each'}`); if (faint) extra.push('faint scan: read from the black & white image'); if (refilled[lead]) extra.push(`re-read ${refilled[lead]} line${refilled[lead] === 1 ? '' : 's'} the first pass missed`);
   const steps = [...pp.steps, ...extra, `${lead === L_SQ ? 'Hebrew' : 'Rashi'} model led${other ? `, ${swapped} line${swapped === 1 ? '' : 's'} taken from the ${other === L_SQ ? 'Hebrew' : 'Rashi'} model` : ''}`, `${pc.changes.length} word${pc.changes.length === 1 ? '' : 's'} corrected from the ${LMU && USE_LM ? 'Sefaria word model' : 'word list'}`];
   return { text: pc.text, raw: text, changes: pc.changes, steps, lead, scores, pp };
 }
