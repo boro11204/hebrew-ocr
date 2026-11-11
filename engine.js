@@ -6,8 +6,8 @@
 // line-by-line voting between them, and word-list post-correction tuned for Rashi letter confusions.
 // Everything here is plain code: no key, no server, no AI.
 
-import { findSectionStarts, applySectionBreaks } from './sections.js?v=13';
-import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=13';
+import { findSectionStarts, applySectionBreaks } from './sections.js?v=15';
+import { cleanLayout, applyClean, cleanSummary } from './layout.js?v=15';
 const TESS_BASE = new URL('./vendor/tess/', import.meta.url).href;
 const LANG_BASE = new URL('./tessdata', import.meta.url).href;
 // v4 (Nov 2026): both models fine-tuned on real printed lines (Vilna Shas 1925 + Prague 1815), see github.com/boro11204/hebrew-ocr-offline
@@ -85,6 +85,18 @@ function lanczosResize(g, w, h, W, H) {
 }
 
 // full preprocessing. opts: { script: 'square'|'rashi'|'mixed', binarize: 'auto'|'otsu'|'adaptive', straighten: bool }
+// ---------------------------------------------------------------- v14: blurry-scan sharpening (Nov 2026)
+// Auto mode, faint test pages: letters wrong 16.9% -> 14.5%; square sample 2.8% -> 1.5%; old crop (Auto) 11.1% -> 10.8%.
+// Not used in Rashi mode (it made the faint Rashi test worse). Clean pages never trigger it.
+const EDGE_BLURRY = 55;                  // below this edge crispness (per 70 px line height) the page is sharpened
+const BLUR_SHARP = 1, BLUR_SHARP_R = 3;  // unsharp mask: amount, radius in px per 70 px of line height
+function gaussBlur(g, w, h, sig) { const r = Math.max(1, Math.ceil(sig * 2.5)); const k = []; let s = 0; for (let i = -r; i <= r; i++) { const v = Math.exp(-i * i / (2 * sig * sig)); k.push(v); s += v; } for (let i = 0; i < k.length; i++) k[i] /= s; const t = new Float32Array(g.length); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let a = 0; for (let i = -r; i <= r; i++) { const xx = Math.min(w - 1, Math.max(0, x + i)); a += g[y * w + xx] * k[i + r]; } t[y * w + x] = a; } const o = new Uint8ClampedArray(g.length); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let a = 0; for (let i = -r; i <= r; i++) { const yy = Math.min(h - 1, Math.max(0, y + i)); a += t[yy * w + x] * k[i + r]; } o[y * w + x] = a; } return o; }
+// how crisp the letter edges are: 99.5th percentile of the left-right brightness step (every 3rd row)
+function edgeSharpness(g, w, h) {
+  const hist = new Uint32Array(256); let n = 0;
+  for (let y = 0; y < h; y += 3) { const o = y * w; for (let x = 1; x < w; x++) { hist[Math.abs(g[o + x] - g[o + x - 1])]++; n++; } }
+  let c = 0; const lim = n * 0.995; for (let v = 0; v < 256; v++) { c += hist[v]; if (c >= lim) return v; } return 255;
+}
 export function preprocess(srcCanvas, opts = {}) {
   const steps = []; let c = srcCanvas; let w = c.width, h = c.height;
   let g = grayOf(c); const pitch0 = linePitch(g, w, h);
@@ -94,6 +106,12 @@ export function preprocess(srcCanvas, opts = {}) {
   const maxPx = 36e6, maxSide = 9000; scale = Math.min(scale, Math.sqrt(maxPx / (w * h)), maxSide / Math.max(w, h)); if (scale < 1) scale = Math.max(scale, 0.25);
   if (Math.abs(scale - 1) > 0.05) { const W2 = Math.round(w * scale), H2 = Math.round(h * scale); g = scale > 1 ? lanczosResize(g, w, h, W2, H2) : grayOf(canvasFrom(c, W2, H2)); w = W2; h = H2; steps.push(`${scale > 1 ? 'enlarged' : 'reduced'} ×${scale.toFixed(1)}`); }
   autocontrast(g); g = median3(g, w, h); steps.push('contrast + denoise');
+  // v14: a blurry or faint scan (soft letter edges) is sharpened before it is binarized and read
+  // (Auto and Square modes; crisp prints measure ~80 and are left exactly as before)
+  const edgeK = (pitch0 ? pitch0 * scale : 70) / 70;
+  const edge = Math.round(edgeSharpness(g, w, h) * edgeK);
+  const sharpened = !opts.noSharp && opts.script !== 'rashi' && edge < EDGE_BLURRY;
+  if (sharpened) { const bl = gaussBlur(g, w, h, BLUR_SHARP_R * edgeK); for (let i = 0; i < g.length; i++) g[i] = Math.max(0, Math.min(255, g[i] + BLUR_SHARP * (g[i] - bl[i]))); steps.push('blurry scan: sharpened the letters'); }
   const ang = skewAngle(binarizeOtsu(g), w, h);
   if (Math.abs(ang) >= 0.25) { c = rotateCanvas(grayToCanvas(g, w, h), -ang); w = c.width; h = c.height; g = grayOf(c); steps.push(`deskewed ${ang > 0 ? '+' : ''}${ang.toFixed(2)}°`); }
   const pitch = pitch0 * scale;
@@ -111,7 +129,7 @@ export function preprocess(srcCanvas, opts = {}) {
     catch (e) { console.warn('page cleanup skipped: ' + e.message); steps.push('page cleanup skipped'); }
   }
   if (cols.length > 1) steps.push(`${cols.length} columns found`);
-  return { bin: grayToCanvas(b, w, h), gray: grayToCanvas(gray, w, h), w, h, cols, steps, scale, angle: ang, clean, bands };
+  return { bin: grayToCanvas(b, w, h), gray: grayToCanvas(gray, w, h), w, h, cols, steps, scale, angle: ang, clean, bands, edge, sharpened };
 }
 
 // ---------------------------------------------------------------- text helpers
@@ -228,7 +246,7 @@ async function fillGaps(wk, cc, L, bands) {
 export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto', straighten = true, clean = true, onStatus } = {}) {
   const say = t => onStatus && onStatus(t);
   say('Engine: cleaning up the page image…');
-  const pp = preprocess(srcCanvas, { script, binarize, straighten, clean });
+  let pp = preprocess(srcCanvas, { script, binarize, straighten, clean });
   const langs = script === 'square' ? [L_SQ] : script === 'rashi' ? [L_RASHI, L_SQ] : [L_SQ, L_RASHI];
   await loadWords().catch(() => null);
   const USE_LM = !(typeof window !== 'undefined' && window.__HOCR_NOLM);
@@ -250,6 +268,14 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   }
   return { res, refilled }; };
   let { res, refilled } = await readAll(USE_GRAY ? pp.gray : pp.bin);
+  // v14: a sharpened (blurry) page is also read unsharpened; whichever gives more real words is kept
+  if (pp.sharpened) {
+    const massR = R => Math.max(...langs.map(l => dictMass(R[l].flat().filter(x => !x.para).map(x => x.text).join(' '))));
+    say('Engine: blurry scan, comparing with an unsharpened reading…');
+    const pS = pp; pp = preprocess(srcCanvas, { script, binarize, straighten, clean, noSharp: true });
+    const R0 = await readAll(USE_GRAY ? pp.gray : pp.bin);
+    if (massR(R0.res) >= massR(res)) { res = R0.res; refilled = R0.refilled; } else pp = pS;
+  }
   // which model fits this page better (share of real words) — that one leads, the other may replace single lines
   const pageText = l => res[l].flat().filter(x => !x.para).map(x => x.text).join(' ');
   const scores = Object.fromEntries(langs.map(l => [l, dictRatio(pageText(l))]));
@@ -264,7 +290,7 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
   }
   const lead = langs.slice().sort((a, b) => scores[b] - scores[a])[0]; const other = langs.find(l => l !== lead);
   let swapped = 0; const colTexts = [];
-  // v13: where a new teshuva / numbered section starts (page layout only); marked with U+2063 on a copy of the text
+  // v14: where a new teshuva / numbered section starts (page layout only); marked with U+2063 on a copy of the text
   const SECT = !(typeof window !== 'undefined' && window.__HOCR_NOSECT); const SM = '\u2063'; const colMarked = []; let nSect = 0;
   for (let i = 0; i < pp.cols.length; i++) {
     const A = res[lead][i], B = other ? res[other][i].filter(x => !x.para) : [];
@@ -288,7 +314,7 @@ export async function enginePage(srcCanvas, { script = 'mixed', binarize = 'auto
 
 // searchable PDF page: page image + invisible text layer, made by Tesseract's own PDF writer
 export async function pdfPageBytes(srcCanvas, script = 'mixed', onStatus) {
-  const pp = preprocess(srcCanvas, { script, columns: false, clean: false });
+  const pp = preprocess(srcCanvas, { script, columns: false, clean: false, noSharp: true });
   // keep the PDF light: page image at most 2000 px on the long side
   const s = Math.min(1, 2000 / Math.max(pp.w, pp.h)); const img = s < 1 ? canvasFrom(pp.gray, Math.round(pp.w * s), Math.round(pp.h * s)) : pp.gray;
   const lang = script === 'square' ? L_SQ : script === 'rashi' ? L_RASHI : L_SQ;

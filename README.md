@@ -1,4 +1,4 @@
-# Hebrew OCR (v3, Nov 8 2026; engine v9 Nov 10 2026)
+# Hebrew OCR (v3, Nov 8 2026; engine v14 Nov 11 2026)
 
 Free Hebrew OCR in the browser for seforim, Rashi script, old prints and Yiddish. Live at https://hebrew-ocr.sites.tab.bot
 
@@ -24,6 +24,11 @@ No server. No key is stored anywhere but the user's own browser.
 
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
 
+
+## v14: Blurry / faint scans read better (Nov 11, 2026)
+- The engine now measures how crisp the letter edges are (after enlarging to the standard line height). A blurry or faint scan (soft edges) is sharpened (unsharp mask) before it is turned black & white and read, in Auto and Square modes. The page is also read without sharpening, and whichever reading gives more real words is kept. Clean prints never trigger it, so their results are unchanged. Not used in Rashi mode, because it made the faint Rashi test worse.
+- Measured on synthetic faint test pages (Prague holdout pages 15/35/105, degraded): Auto mode 16.9% → 14.5% letters wrong. Square sample 2.8% → 1.5%. Old Rashi crop, Auto mode 11.1% → 10.8%. 10-page holdout, Rashi mode crop and dirty pages: unchanged.
+- Files load as `?v=14`.
 
 ## v12: Compare two texts (Nov 11, 2026)
 - New "Compare two texts" section (button "⇄ Compare texts" at the top, and "⇄ Compare with another text" above the OCR result). Text A can be the current OCR result ("Use OCR result"), Text B is pasted or loaded from a .txt file (UTF-8 or Windows-1255). Both boxes are editable.
