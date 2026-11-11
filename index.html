@@ -9,13 +9,13 @@
 <meta property="og:description" content="Photo or PDF in, Hebrew text out. Copy, TXT or Word. Free with your own Google AI key.">
 <meta name="theme-color" content="#1f3a5f">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f3a5f'/%3E%3Ctext x='32' y='46' font-size='38' text-anchor='middle' fill='%23f4d58d' font-family='serif'%3E%D7%90%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 <header class="top">
   <div class="wrap top-in">
     <div class="brand"><span class="logo">א</span><div><h1>Hebrew OCR</h1><p>Seforim · Rashi script · old prints · Yiddish → editable text</p></div></div>
-    <button id="btnSettings" class="ghost" aria-expanded="false">⚙ Settings</button>
+    <div class="row"><a id="lnkCompare" class="ghost btnlink" href="#compareCard">⇄ Compare texts</a><button id="btnSettings" class="ghost" aria-expanded="false">⚙ Settings</button></div>
   </div>
 </header>
 
@@ -95,6 +95,14 @@
   <!-- STEP 3: RUN -->
   <section class="card" id="runCard">
     <div class="step-h"><span class="num">3</span><h2>Read the text</h2></div>
+    <div class="scriptbox">
+      <span class="lbl">Script on the page</span>
+      <div id="scriptSwitch" class="seg" role="radiogroup" aria-label="Script on the page">
+        <button type="button" role="radio" data-v="mixed"><b>Auto</b><small>mixed page: Gemara, Rashi, Tosafos…</small></button>
+        <button type="button" role="radio" data-v="rashi"><b>Rashi <bdi>כתב רש״י</bdi></b><small>whole page in Rashi script</small></button>
+        <button type="button" role="radio" data-v="square"><b>Square <bdi>מרובע</bdi></b><small>regular square letters</small></button>
+      </div>
+    </div>
     <div class="modes">
       <label>How to read
         <select id="modeSel">
@@ -103,7 +111,7 @@
           <option value="engine">Offline engine only — no key, no AI, no limit</option>
         </select>
       </label>
-      <label>Script
+      <label>Script (same as the buttons above)
         <select id="scriptSel">
           <option value="mixed">Auto / mixed page (Gemara, Rashi, Tosafos…)</option>
           <option value="square">Regular square letters (מרובע)</option>
@@ -138,6 +146,7 @@
         <button id="btnTxt" class="ghost small">Download .txt</button>
         <button id="btnDocx" class="primary small">Download Word (.docx)</button>
         <button id="btnPdf" class="ghost small" title="Page images with a hidden, searchable text layer">Searchable PDF</button>
+        <button id="btnCompareOcr" class="ghost small" title="Compare this text with another text or edition">⇄ Compare with another text</button>
       </div>
     </div>
     <div class="opts">
@@ -147,6 +156,45 @@
     <p class="muted small">Check each page next to its picture. You can correct the text right in the box — downloads use your corrections. <b>[?]</b> = the AI wasn't sure about that word. “What was done” under each page lists every clean-up step and every word that was fixed automatically. Lines like <b><bdi dir="rtl">[[רש״י]]</bdi></b> mark where each part of the page (Gemara, Rashi, Tosafos…) starts.</p>
     <div id="pages"></div>
   </section>
+  <!-- COMPARE (v12) -->
+  <section class="card" id="compareCard">
+    <div class="step-h"><span class="num">⇄</span><h2>Compare two texts</h2></div>
+    <p class="muted small">Put in two Hebrew texts, for example the OCR result and an updated text or another edition, and see exactly where they differ: word by word, with the different letters marked. This only shows the differences; it never changes your OCR text. Runs in your browser, no AI.</p>
+    <div class="cmp-in">
+      <div class="cmp-box">
+        <div class="row between wrap-row"><b>Text A <span class="muted small">(e.g. the OCR result)</span></b>
+          <span class="row wrap-row"><button id="cmpUseOcr" class="ghost small" type="button">Use OCR result</button><label class="ghost small camera filebtn"><input id="cmpFileA" type="file" accept=".txt,text/plain">Load .txt</label></span></div>
+        <textarea id="cmpA" class="cmp-ta" dir="rtl" lang="he" spellcheck="false" placeholder="הדבק כאן טקסט א׳ — Paste Text A here, or press Use OCR result"></textarea>
+      </div>
+      <div class="cmp-box">
+        <div class="row between wrap-row"><b>Text B <span class="muted small">(updated text / other edition)</span></b>
+          <span class="row wrap-row"><label class="ghost small camera filebtn"><input id="cmpFileB" type="file" accept=".txt,text/plain">Load .txt</label></span></div>
+        <textarea id="cmpB" class="cmp-ta" dir="rtl" lang="he" spellcheck="false" placeholder="הדבק כאן טקסט ב׳ — Paste Text B here, or load a .txt file"></textarea>
+      </div>
+    </div>
+    <div class="cmp-opts">
+      <label class="chk"><input type="checkbox" id="cmpNikud" checked> Ignore nikud &amp; te'amim</label>
+      <label class="chk"><input type="checkbox" id="cmpPunct"> Ignore punctuation (. , : ״ ׳ ־ …)</label>
+      <label class="chk"><input type="checkbox" id="cmpSpace" checked> Ignore spacing &amp; line breaks</label>
+      <label class="chk"><input type="checkbox" id="cmpLabels" checked> Ignore page / section labels (<bdi dir="rtl">[[רש״י]]</bdi>, <bdi dir="rtl">=== עמוד ===</bdi>)</label>
+    </div>
+    <div class="row wrap-row">
+      <button id="cmpRun" class="primary big" type="button">Compare</button>
+      <button id="cmpSwap" class="ghost small" type="button">⇅ Swap A and B</button>
+      <button id="cmpClear" class="ghost small danger" type="button">Clear</button>
+    </div>
+    <p id="cmpMsg" class="msg" role="status"></p>
+    <div id="cmpResult" class="hidden">
+      <p id="cmpSummary" class="cmp-sum"></p>
+      <div class="cmp-bar">
+        <div class="row"><button id="cmpPrev" class="ghost small" type="button" aria-label="Previous difference">▲ Previous</button><span id="cmpPos" class="muted small"></span><button id="cmpNext" class="primary small" type="button" aria-label="Next difference">Next ▼</button></div>
+        <div class="row wrap-row"><button id="cmpHtml" class="ghost small" type="button">Download report (.html)</button><button id="cmpTxt" class="ghost small" type="button">Download report (.txt)</button></div>
+      </div>
+      <div class="legend small"><del>removed: only in A</del> <ins>added: in B</ins> <span class="muted">Darker letters = the exact letters that differ. Tap a difference to select it.</span></div>
+      <div id="cmpOut" class="cmp-out" dir="rtl" lang="he"></div>
+      <details id="cmpListBox" class="howto" open><summary>List of differences (tap one to jump to it)</summary><ol id="cmpList" class="cmp-list"></ol></details>
+    </div>
+  </section>
 </main>
 
 <footer class="wrap foot">
@@ -154,6 +202,7 @@
 </footer>
 
 <dialog id="zoom"><img id="zoomImg" alt="Page"><button id="zoomClose" class="primary small">Close</button></dialog>
-<script type="module" src="app.js?v=11"></script>
+<script type="module" src="app.js?v=12"></script>
+<script type="module" src="compare.js?v=12"></script>
 </body>
 </html>

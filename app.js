@@ -1,6 +1,6 @@
 import { MODELS, AUTO_CHAIN, QUALITY_CHAIN, API_BASE, buildRequest, endpoint, extractText, classifyError,
-  pacificDay, applyOptions, allText, buildDocx, parseRange, pageTitle, fixFinals } from './core.js?v=11';
-import { enginePage, pdfPageBytes, canvasFrom } from './engine.js?v=11';
+  pacificDay, applyOptions, allText, buildDocx, parseRange, pageTitle, fixFinals } from './core.js?v=12';
+import { enginePage, pdfPageBytes, canvasFrom } from './engine.js?v=12';
 
 const $ = s => document.querySelector(s);
 const LS = { key: 'hocr.key', settings: 'hocr.settings', usage: 'hocr.usage' };
@@ -398,6 +398,6 @@ $('#btnPdf').onclick = async e => {
 };
 
 // test hook (used by the automated checks; harmless)
-window.__hocr = { pages: () => pages, handleFiles, settings };
+window.__hocr = { pages: () => pages, handleFiles, settings, ocrText: () => exportPages().map(p => p.text).join('\n\n') }; // ocrText: read-only copy for the Compare tool
 showMode(); showKeyState(); renderUsage(); updateRunBtn();
 if (!apiKey && needsKey()) $('#howto').open = true;

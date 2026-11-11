@@ -18,12 +18,21 @@ Text per page, with a "What was done" list of every clean-up step and every word
 The idea of listing each automatic fix comes from the free OCR page that ivelt.com member "שטאלץ צו זיין א איד" posted on Mar 10, 2026 ("if anyone wants to take it and update it — with honor").
 
 ## Files
-`index.html`, `style.css`, `app.js` (UI, AI calls), `core.js` (prompts, models, docx writer), `engine.js` (offline engine), `vendor/` (tesseract.js, pdf.js, pdf-lib, heic2any), `tessdata/` (models, word list, NOTICE).
+`index.html`, `style.css`, `app.js` (UI, AI calls), `compare.js` (compare two texts), `core.js` (prompts, models, docx writer), `engine.js` (offline engine), `vendor/` (tesseract.js, pdf.js, pdf-lib, heic2any), `tessdata/` (models, word list, NOTICE).
 
 No server. No key is stored anywhere but the user's own browser.
 
 Large third-party files (Tesseract cores, models, word list, pdf.js worker, heic2any) are served on the live site but not stored in this repo; `tools/get-big-files.sh` fetches them.
 
+
+## v12: Compare two texts (Nov 11, 2026)
+- New "Compare two texts" section (button "⇄ Compare texts" at the top, and "⇄ Compare with another text" above the OCR result). Text A can be the current OCR result ("Use OCR result"), Text B is pasted or loaded from a .txt file (UTF-8 or Windows-1255). Both boxes are editable.
+- Word-by-word diff, with the exact differing letters marked darker inside each changed word. Removed (only in A) in red, added (in B) in green. Summary: % of letters that differ (edit distance over Text B's letters), words changed / added in B / missing from B.
+- Options: ignore nikud & te'amim (on by default), ignore punctuation, ignore spacing & line breaks (on: a word split or joined differently is not counted), ignore page / section labels like [[רש״י]] (on).
+- Previous / Next difference buttons, a clickable list of every difference, and downloadable reports (.html with the colored diff and a table, or .txt).
+- The compare tool only reads; it never changes the OCR text. Everything runs in the browser (compare.js), no AI.
+- The script choice (Auto / Rashi / Square) is now three big buttons at the top of step 3. They set the same setting as before; OCR results are unchanged (checked byte for byte against v11).
+- Files load as `?v=12`.
 
 ## v9 engine (Nov 10, 2026)
 - New Rashi model `heb_rashi7` (used by Rashi and Auto mode): `heb_rashi6` fine-tuned on 24,013 new real Rashi and Tosafot lines from 310 pages of the Vilna Romm Shas (1882 and 1925 printings, archive.org scans, 31 tractates). Labels come from Sefaria's Rashi (Vilna edition), Tosafot and Rashbam texts, matched to each printed line. A line was kept only when the match was exact apart from look-alike letters, or when the lines above and below it pinned the text. Training: 3 stages (7,000 iterations at learning rate 2e-5, then 5,000 at 1e-5, then 5,000 at 1e-5 with more worn copies). Each stage mixed 9,000 Vilna lines (40–65% artificially worn), 6,000 earlier Prague lines and 1,500 lines heavy in look-alike letters. Pages near the test pages were left out.
